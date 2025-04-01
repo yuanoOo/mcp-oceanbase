@@ -17,6 +17,22 @@ OCP (OceanBase Cloud Platform) MCP Server.
 
 ![](assets/ocp_claude.jpg)
 
+Claude Desktop config  example:
+
+```json
+ "ocp": {
+            "command": "{python or uv}",
+            "args": [
+              "{Your path}/mcp-oceanbase/src/ocp_mcp_server/server.py"
+            ],
+            "env": {
+              "AK": "******",
+              "SK": "******",
+              "ADDRESS":"ip:port"
+            }
+          }
+```
+
 ## 社区
 
 当你需要帮助时，你可以在 [https://ask.oceanbase.com](https://ask.oceanbase.com) 上找到开发者和其他的社区伙伴。

@@ -18,6 +18,22 @@ To use with the MCP Client, it is necessary to utilize a client that supports Pr
 
 ![](assets/ocp_claude.jpg)
 
+Claude Desktop config  example:
+
+```json
+ "ocp": {
+            "command": "{python or uv}",
+            "args": [
+              "{Your path}/mcp-oceanbase/src/ocp_mcp_server/server.py"
+            ],
+            "env": {
+              "AK": "******",
+              "SK": "******",
+              "ADDRESS":"ip:port"
+            }
+          }
+```
+
 ## Community
 
 Don’t hesitate to ask!
