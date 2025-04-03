@@ -27,4 +27,4 @@ packages = [
 ]
 
 [project.scripts]
-oceanbase_mcp_server = "oceanbase_mcp_server:main"
+oceanbase_mcp_server = "src.oceanbase_mcp_server:main"
