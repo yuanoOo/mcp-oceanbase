@@ -1,5 +1,7 @@
 import logging
 import os
+from typing import Literal, Optional, Dict
+
 from dotenv import load_dotenv
 from mysql.connector import connect, Error
 from mcp.server.fastmcp import FastMCP
@@ -12,34 +14,16 @@ logging.basicConfig(
 logger = logging.getLogger("oceanbase_mcp_server")
 
 load_dotenv()
-
-
-def get_db_config():
-    """Get database configuration from environment variables."""
-    config = {
-        "host": os.getenv("OB_HOST", "localhost"),
-        "port": int(os.getenv("OB_PORT", "2881")),
-        "user": os.getenv("OB_USER"),
-        "password": os.getenv("OB_PASSWORD"),
-        "database": os.getenv("OB_DATABASE")
-    }
-
-    if not all([config["user"], config["password"], config["database"]]):
-        logger.error("Missing required database configuration. Please check environment variables:")
-        logger.error("OB_USER, OB_PASSWORD, and OB_DATABASE are required")
-        raise ValueError("Missing required database configuration")
-
-    return config
-
+global_config = None
 
 # Initialize server
 app = FastMCP("oceanbase_mcp_server")
 
 
-@app.resource("oceanbase://sample/{table}", description="list all tables")
+@app.resource("oceanbase://sample/{table}", description="table sample")
 def list_resources(table: str) -> str:
     """List OceanBase tables as resources."""
-    config = get_db_config()
+    config = configure_db_connection()
     try:
         with connect(**config) as conn:
             with conn.cursor() as cursor:
@@ -56,14 +40,14 @@ def list_resources(table: str) -> str:
 @app.resource("oceanbase://tables", description="list all tables")
 def list_resources() -> str:
     """List OceanBase tables as resources."""
-    config = get_db_config()
+    config = configure_db_connection()
     try:
         with connect(**config) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SHOW TABLES")
                 tables = cursor.fetchall()
                 logger.info(f"Found tables: {tables}")
-                resp_header = "Columns info of this table: \n"
+                resp_header = "Tables of this table: \n"
                 columns = [desc[0] for desc in cursor.description]
                 rows = cursor.fetchall()
                 result = [",".join(map(str, row)) for row in rows]
@@ -73,10 +57,62 @@ def list_resources() -> str:
         return "Failed to list tables"
 
 
+@app.tool(name="configure_db_connection")
+def configure_db_connection(
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
+        database: Optional[str] = None
+) -> Dict[str, str | int]:
+    """
+    Retrieve OceanBase database connection information.
+    If no parameters are provided, the configuration is loaded from environment variables.
+    Otherwise, user-defined connection parameters will be used.
+
+    :param host: Database host address. Defaults to environment variable OB_HOST or "localhost".
+    :param port: Database port number. Defaults to environment variable OB_PORT or "2881".
+    :param user: Database username. Required. Defaults to user input or environment variable OB_USER.
+    :param password: Database password. Required. Defaults to user input or environment variable OB_PASSWORD.
+    :param database: Database name. Required. Defaults to user input or environment variable OB_DATABASE.
+    :return: A dictionary containing the database connection configuration.
+    :raises ValueError: Raised if any of the required parameters (user, password, database) are missing.
+    """
+    global global_config
+    if global_config:
+        return global_config
+
+    # Use user-provided values or fallback to environment variables
+    config = {
+        "host": host or os.getenv("OB_HOST", "localhost"),
+        "port": port or os.getenv("OB_PORT", 2881),
+        "user": user or os.getenv("OB_USER"),
+        "password": password or os.getenv("OB_PASSWORD"),
+        "database": database or os.getenv("OB_DATABASE"),
+    }
+
+    # Check if all required parameters are provided
+    missing_params = [key for key in ["user", "password", "database"] if not config.get(key)]
+    if missing_params:
+        logger.error("Missing required database configuration. Please check the following parameters: %s",
+                     ", ".join(missing_params))
+        raise ValueError(f"Unable to obtain database connection configuration information from environment variables. "
+                         f"Please provide database connection configuration information.")
+
+    # Log successfully loaded configuration (but hide sensitive information like the password)
+    logger.info(
+        "Database configuration loaded successfully: host=%s, port=%d, user=%s, database=%s",
+        config["host"], config["port"], config["user"], config["database"]
+    )
+    global_config = config
+
+    return global_config
+
+
 @app.tool(name="execute_sql", description="Execute an SQL query on the OceanBase server")
 def call_tool(query: str) -> str:
     """Execute SQL commands."""
-    config = get_db_config()
+    config = configure_db_connection()
     logger.info(f"Calling tool: execute_sql  with arguments: {query}")
 
     try:
@@ -87,7 +123,7 @@ def call_tool(query: str) -> str:
                 # Special handling for SHOW TABLES
                 if query.strip().upper().startswith("SHOW TABLES"):
                     tables = cursor.fetchall()
-                    result = ["Tables_in_" + config["database"]]  # Header
+                    result = [f"Tables in {config["database"]}: "]  # Header
                     result.extend([table[0] for table in tables])
                     return "\n".join(result)
 
@@ -122,12 +158,10 @@ def call_tool(query: str) -> str:
         return f"Error executing query: {str(e)}"
 
 
-def main():
+def main(transport: Literal["stdio", "sse"] = "stdio"):
     """Main entry point to run the MCP server."""
-    logger.info("Starting OceanBase MCP server...")
-    config = get_db_config()
-    logger.info(f"Database config: {config['host']}/{config['database']} as {config['user']}")
-    app.run()
+    logger.info(f"Starting OceanBase MCP server with {transport} mode...")
+    app.run(transport=transport)
 
 
 if __name__ == "__main__":
