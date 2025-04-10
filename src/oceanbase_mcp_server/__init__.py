@@ -3,6 +3,8 @@ from . import server_on_fastmcp
 import asyncio
 import argparse
 
+from . import server
+
 
 def main():
     """Main entry point for the package."""
