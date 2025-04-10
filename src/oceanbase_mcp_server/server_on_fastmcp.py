@@ -3,13 +3,12 @@ import os
 from typing import Literal, Optional, Dict
 
 from dotenv import load_dotenv
-from mysql.connector import connect, Error
 from mcp.server.fastmcp import FastMCP
+from mysql.connector import connect, Error
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("oceanbase_mcp_server")
 
@@ -21,8 +20,7 @@ app = FastMCP("oceanbase_mcp_server")
 
 
 @app.resource("oceanbase://sample/{table}", description="table sample")
-def list_resources(table: str) -> str:
-    """List OceanBase tables as resources."""
+def table_sample(table: str) -> str:
     config = configure_db_connection()
     try:
         with connect(**config) as conn:
@@ -33,12 +31,12 @@ def list_resources(table: str) -> str:
                 result = [",".join(map(str, row)) for row in rows]
                 return "\n".join([",".join(columns)] + result)
 
-    except Error as e:
+    except Error:
         return f"Failed to sample table: {table}"
 
 
 @app.resource("oceanbase://tables", description="list all tables")
-def list_resources() -> str:
+def list_tables() -> str:
     """List OceanBase tables as resources."""
     config = configure_db_connection()
     try:
@@ -59,11 +57,11 @@ def list_resources() -> str:
 
 @app.tool(name="configure_db_connection")
 def configure_db_connection(
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        database: Optional[str] = None
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
+    database: Optional[str] = None,
 ) -> Dict[str, str | int]:
     """
     Retrieve OceanBase database connection information.
@@ -92,24 +90,35 @@ def configure_db_connection(
     }
 
     # Check if all required parameters are provided
-    missing_params = [key for key in ["user", "password", "database"] if not config.get(key)]
+    missing_params = [
+        key for key in ["user", "password", "database"] if not config.get(key)
+    ]
     if missing_params:
-        logger.error("Missing required database configuration. Please check the following parameters: %s",
-                     ", ".join(missing_params))
-        raise ValueError(f"Unable to obtain database connection configuration information from environment variables. "
-                         f"Please provide database connection configuration information.")
+        logger.error(
+            "Missing required database configuration. Please check the following parameters: %s",
+            ", ".join(missing_params),
+        )
+        raise ValueError(
+            "Unable to obtain database connection configuration information from environment variables. "
+            "Please provide database connection configuration information."
+        )
 
     # Log successfully loaded configuration (but hide sensitive information like the password)
     logger.info(
         "Database configuration loaded successfully: host=%s, port=%d, user=%s, database=%s",
-        config["host"], config["port"], config["user"], config["database"]
+        config["host"],
+        config["port"],
+        config["user"],
+        config["database"],
     )
     global_config = config
 
     return global_config
 
 
-@app.tool(name="execute_sql", description="Execute an SQL query on the OceanBase server")
+@app.tool(
+    name="execute_sql", description="Execute an SQL query on the OceanBase server"
+)
 def call_tool(query: str) -> str:
     """Execute SQL commands."""
     config = configure_db_connection()
@@ -123,7 +132,7 @@ def call_tool(query: str) -> str:
                 # Special handling for SHOW TABLES
                 if query.strip().upper().startswith("SHOW TABLES"):
                     tables = cursor.fetchall()
-                    result = [f"Tables in {config["database"]}: "]  # Header
+                    result = [f"Tables in {config['database']}: "]  # Header
                     result.extend([table[0] for table in tables])
                     return "\n".join(result)
 
@@ -151,7 +160,9 @@ def call_tool(query: str) -> str:
                 # Non-SELECT queries
                 else:
                     conn.commit()
-                    return f"Query executed successfully. Rows affected: {cursor.rowcount}"
+                    return (
+                        f"Query executed successfully. Rows affected: {cursor.rowcount}"
+                    )
 
     except Error as e:
         logger.error(f"Error executing SQL '{query}': {e}")
