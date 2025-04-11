@@ -1,9 +1,6 @@
-from oceanbase_mcp_server import server
-from . import server_on_fastmcp
+from . import server, server_on_fastmcp
 import asyncio
 import argparse
-
-from . import server
 
 
 def main():
@@ -16,7 +13,6 @@ def main():
         "--transport", type=str, default="stdio", help="Whether to enable legacy mode."
     )
     args = parser.parse_args()
-
     if args.legacy:
         asyncio.run(server.main())
     else:
@@ -27,4 +23,4 @@ def main():
 
 
 # Expose important items at package level
-__all__ = ["main", "server"]
+__all__ = ["main", "server", "server_on_fastmcp"]
