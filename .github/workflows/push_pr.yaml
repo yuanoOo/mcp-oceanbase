@@ -35,3 +35,4 @@ jobs:
     - name: Code style check
       run: |
         ruff check .
+        ruff format . --check
