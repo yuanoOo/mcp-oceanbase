@@ -10,7 +10,7 @@ def main():
         "--legacy", type=bool, default=False, help="Whether to enable legacy mode."
     )
     parser.add_argument(
-        "--transport", type=str, default="stdio", help="Whether to enable legacy mode."
+        "--transport", type=str, default="stdio", help="Specify the MCP server transport type as stdio or sse."
     )
     args = parser.parse_args()
     if args.legacy:
