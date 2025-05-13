@@ -1,10 +1,11 @@
-from .server import mcp
+from ocp_mcp_server import server
 
 
 def main():
     """Main entry point for the package."""
-    mcp.run(transport="stdio")
+    server.mcp.run(transport="sse")
 
 
 # Expose important items at package level
-__all__ = ["main"]
+
+__all__ = ["main", "server"]

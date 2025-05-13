@@ -18,6 +18,12 @@ email = "open_contact@oceanbase.com"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+include = [
+    "src/oceanbase_mcp_server/**/*.py",
+    "src/ocp_mcp_server/**/*.py"
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/oceanbase_mcp_server", "src/ocp_mcp_server"]
 
