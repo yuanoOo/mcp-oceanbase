@@ -275,9 +275,10 @@ def get_resource_capacity():
         return f"Error executing query: {str(e)}"
 
 
-def main(transport: Literal["stdio", "sse"] = "stdio"):
+def main(transport: Literal["stdio", "sse"] = "stdio", port: int = 8000):
     """Main entry point to run the MCP server."""
     logger.info(f"Starting OceanBase MCP server with {transport} mode...")
+    app.settings.port = port
     app.run(transport=transport)
 
 
