@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { mockLogin } from "./functions/login";
@@ -10,29 +12,32 @@ const server = new Server(CONFIG.server, {
   capabilities: {
     prompts: {},
     tools: {},
-    resources: { suscribe: true, },
+    resources: { suscribe: true },
     logging: {
-      level: 'info',
-    }
-  }
+      level: "info",
+    },
+  },
 });
 
 if (!CONFIG.auth.project) {
-  throw new Error('project is required!');
+  console.error("project is required");
+  process.exit(1);
 }
 
 if (!CONFIG.auth.username) {
-  throw new Error('username is required!');
+  console.error("username is required");
+  process.exit(1);
 }
 
 if (!CONFIG.auth.password) {
-  throw new Error('password is required!');
+  console.error("username is required");
+  process.exit(1);
 }
 
 async function runServer() {
   const transport = new StdioServerTransport();
   await mockLogin();
-  
+
   setUpResources(server);
   setUpTools(server);
   setUpPrompts(server);
