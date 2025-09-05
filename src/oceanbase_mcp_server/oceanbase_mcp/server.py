@@ -13,6 +13,9 @@ from bs4 import BeautifulSoup
 import certifi
 import ssl
 from pydantic import BaseModel
+from pyobvector import ObVecClient, MatchAgainst, l2_distance, inner_product, cosine_distance
+from sqlalchemy import text
+import ast
 
 # Configure logging
 logging.basicConfig(
@@ -168,6 +171,11 @@ def get_ob_ash_report(
         The module where the SESSION is located during sampling (PARSE, EXECUTE, PL, etc.)
         SESSION status records, such as SESSION MODULE, ACTION, CLIENT ID
     This will be very useful when you perform performance analysis.RetryClaude can make mistakes. Please double-check responses.
+
+    Args:
+        start_time: Sample Start Time,Format: yyyy-MM-dd HH:mm:ss.
+        end_time: Sample End Time,Format: yyyy-MM-dd HH:mm:ss.
+        tenant_id: Used to specify the tenant ID for generating the ASH Report. Leaving this field blank or setting it to NULL indicates no restriction on the TENANT_ID.
     """
     logger.info(
         f"Calling tool: get_ob_ash_report  with arguments: {start_time}, {end_time}, {tenant_id}"
@@ -203,7 +211,7 @@ def get_current_tenant() -> str:
     logger.info("Calling tool: get_current_tenant")
     sql_query = "show tenant"
     try:
-        result = execute_sql(sql_query)
+        result = ast.literal_eval(execute_sql(sql_query))
         logger.info(f"Current tenant: {result}")
         return result[0][0]
     except Error as e:
@@ -222,7 +230,7 @@ def get_all_server_nodes():
         raise ValueError("Only sys tenant can get all server nodes")
 
     logger.info("Calling tool: get_all_server_nodes")
-    sql_query = "select * from DBA_OB_SERVERS"
+    sql_query = "select * from oceanbase.DBA_OB_SERVERS"
     try:
         return execute_sql(sql_query)
     except Error as e:
@@ -354,6 +362,175 @@ def get_ob_doc_content(doc_url: str, doc_id: str) -> dict:
     except error.URLError as e:
         logger.error(f"URL Error: {e.reason}")
         return {"result": "No results were found"}
+
+
+@app.tool()
+def oceanbase_text_search(
+    table_name: str,
+    full_text_search_column_name: list[str],
+    full_text_search_expr: str,
+    other_where_clause: Optional[list[str]] = None,
+    limit: int = 5,
+    output_column_name: Optional[list[str]] = None,
+) -> str:
+    """
+    Search for documents using full text search in an OceanBase table.
+
+    Args:
+        table_name: Name of the table to search.
+        full_text_search_column_name: Specify the columns to be searched in full text.
+        full_text_search_expr: Specify the keywords or phrases to search for.
+        other_where_clause: Other WHERE condition query statements except full-text search.
+        limit: Maximum number of results to return.
+        output_column_name: columns to include in results.
+    """
+    logger.info(
+        f"Calling tool: oceanbase_text_search  with arguments: {table_name}, {full_text_search_column_name}, {full_text_search_expr}"
+    )
+    config = db_conn_info.model_dump()
+    client = ObVecClient(
+        uri=config["host"] + ":" + str(config["port"]),
+        user=config["user"],
+        password=config.get("password", ""),
+        db_name=config.get("database", ""),
+    )
+    where_clause = [MatchAgainst(full_text_search_expr, *full_text_search_column_name)]
+    for item in other_where_clause or []:
+        where_clause.append(text(item))
+    results = client.get(
+        table_name=table_name,
+        ids=None,
+        where_clause=where_clause,
+        output_column_name=output_column_name,
+        n_limits=limit,
+    )
+    output = f"Search results for '{full_text_search_expr}'"
+    if other_where_clause:
+        output += " and " + ",".join(other_where_clause)
+    output += f" in table '{table_name}':\n\n"
+    for result in results:
+        output += str(result) + "\n\n"
+    return output
+
+
+@app.tool()
+def oceabase_vector_search(
+    table_name: str,
+    vector_data: list[float],
+    vec_column_name: str = "vector",
+    distance_func: Optional[str] = "l2",
+    with_distance: Optional[bool] = True,
+    topk: int = 5,
+    output_column_name: Optional[list[str]] = None,
+) -> str:
+    """
+    Perform vector similarity search on an OceanBase table.
+
+    Args:
+        table_name: Name of the table to search.
+        vector_data: Query vector.
+        vec_column_name: column name containing vectors to search.
+        distance_func: The index distance algorithm used when comparing the distance between two vectors.
+        with_distance: Whether to output distance data.
+        topk: Number of results returned.
+        output_column_name: Returned table fields.
+    """
+    logger.info(
+        f"Calling tool: oceabase_vector_search  with arguments: {table_name}, {vector_data[:10]}, {vec_column_name}"
+    )
+    config = db_conn_info.model_dump()
+    client = ObVecClient(
+        uri=config["host"] + ":" + str(config["port"]),
+        user=config["user"],
+        password=config.get("password", ""),
+        db_name=config.get("database", ""),
+    )
+    match distance_func:
+        case "l2":
+            search_distance_func = l2_distance
+        case "inner product":
+            search_distance_func = inner_product
+        case "cosine":
+            search_distance_func = cosine_distance
+        case _:
+            raise ValueError("Unkown distance function")
+
+    results = client.ann_search(
+        table_name=table_name,
+        vec_data=vector_data,
+        vec_column_name=vec_column_name,
+        distance_func=search_distance_func,
+        with_dist=with_distance,
+        topk=topk,
+        output_column_names=output_column_name,
+    )
+    output = f"Vector search results for '{table_name}:\n\n'"
+    for result in results:
+        output += str(result) + "\n\n"
+    return output
+
+
+@app.tool()
+def oceanbase_hybrid_search(
+    table_name: str,
+    vector_data: list[float],
+    vec_column_name: str = "vector",
+    distance_func: Optional[str] = "l2",
+    with_distance: Optional[bool] = True,
+    filter_expr: Optional[list[str]] = None,
+    topk: int = 5,
+    output_column_name: Optional[list[str]] = None,
+) -> str:
+    """
+    Perform hybird search combining relational condition filtering(that is, scalar) and vector search.
+
+    Args:
+        table_name: Name of the table to search.
+        vector_data: Query vector.
+        vec_column_name: column name containing vectors to search.
+        distance_func: The index distance algorithm used when comparing the distance between two vectors.
+        with_distance: Whether to output distance data.
+        filter_expr: Scalar conditions requiring filtering in where clause.
+        topk: Number of results returned.
+        output_column_name: Returned table fields,unless explicitly requested, please do not provide.
+    """
+    logger.info(
+        f"""Calling tool: oceanbase_hybrid_search  with arguments: {table_name}, {vector_data[:10]}, {vec_column_name}
+        ,{filter_expr}"""
+    )
+    config = db_conn_info.model_dump()
+    client = ObVecClient(
+        uri=config["host"] + ":" + str(config["port"]),
+        user=config["user"],
+        password=config.get("password", ""),
+        db_name=config.get("database", ""),
+    )
+    match distance_func.lower():
+        case "l2":
+            search_distance_func = l2_distance
+        case "inner product":
+            search_distance_func = inner_product
+        case "cosine":
+            search_distance_func = cosine_distance
+        case _:
+            raise ValueError("Unkown distance function")
+    where_clause = []
+    for item in filter_expr or []:
+        where_clause.append(text(item))
+    results = client.ann_search(
+        table_name=table_name,
+        vec_data=vector_data,
+        vec_column_name=vec_column_name,
+        distance_func=search_distance_func,
+        with_dist=with_distance,
+        where_clause=where_clause,
+        topk=topk,
+        output_column_names=output_column_name,
+    )
+    output = f"Hybrid search results for '{table_name}:\n\n'"
+    for result in results:
+        output += str(result) + "\n\n"
+    return output
 
 
 if ENABLE_MEMORY:
